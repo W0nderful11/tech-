@@ -1,0 +1,218 @@
+import os
+import uuid
+import streamlit as st
+from datetime import datetime
+import google.generativeai as genai
+
+# Load environment variables
+from dotenv import load_dotenv
+load_dotenv()
+
+# Configure Gemini
+genai.configure(api_key=os.environ.get("GOOGLE_API_KEY", "AIzaSyA-HS-2sneO0DEIKKAih40tbVxROm5Tr48"))
+model = genai.GenerativeModel('gemini-2.0-flash-exp')
+
+# App title and description
+st.set_page_config(
+    page_title="AgenticAI Assist",
+    page_icon="🤖",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+st.title("🤖 AgenticAI Assist")
+st.subheader("Autonomous Task Agents for Productivity")
+st.markdown("""
+AgenticAI Assist is a web platform that provides autonomous, multi-step task agents tailored to students and young professionals. 
+The system's core differentiator is User-Verified Autonomy: agents propose plans and sources and require explicit user approval before execution.
+""")
+
+# Initialize session state
+if "tasks" not in st.session_state:
+    st.session_state.tasks = []
+if "current_task" not in st.session_state:
+    st.session_state.current_task = None
+
+# Agent templates
+agent_templates = {
+    "Research Brief": "Create a research brief on the given topic with key points, sources, and summary.",
+    "Summarization": "Summarize the provided text or topic into key points and main ideas.",
+    "Study Plan": "Create a study plan for the given subject with timeline, resources, and milestones."
+}
+
+# Sidebar for task management
+with st.sidebar:
+    st.header("Task Management")
+    
+    # Create new task
+    with st.expander("Create New Task", expanded=True):
+        task_name = st.text_input("Task Name")
+        task_description = st.text_area("Task Description")
+        selected_template = st.selectbox("Agent Template", list(agent_templates.keys()))
+        
+        if st.button("Create Task"):
+            if task_name and task_description:
+                task_id = str(uuid.uuid4())[:8]
+                new_task = {
+                    "id": task_id,
+                    "name": task_name,
+                    "description": task_description,
+                    "template": selected_template,
+                    "status": "Created",
+                    "created_at": datetime.now(),
+                    "approved": False,
+                    "plan": None,
+                    "result": None
+                }
+                st.session_state.tasks.append(new_task)
+                st.success(f"Task '{task_name}' created!")
+            else:
+                st.error("Please fill in task name and description.")
+
+    # Task list
+    st.subheader("Active Tasks")
+    for task in st.session_state.tasks:
+        if st.button(f"{task['name']} ({task['status']})", key=task['id']):
+            st.session_state.current_task = task
+
+# Main content
+tab1, tab2 = st.tabs(["Task Management", "Direct AI Chat"])
+
+with tab1:
+    if st.session_state.current_task:
+        task = st.session_state.current_task
+        
+        st.header(f"Task: {task['name']}")
+        st.write(f"**Description:** {task['description']}")
+        st.write(f"**Template:** {task['template']}")
+        st.write(f"**Status:** {task['status']}")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            if st.button("Generate Plan", disabled=task['status'] != 'Created'):
+                with st.spinner("Generating plan..."):
+                    prompt = f"""
+                    You are an AI agent for {task['template']}.
+                    Task: {task['description']}
+                    
+                    Create a detailed plan with steps, sources, and expected outcomes.
+                    Respond ONLY with a valid JSON object in this exact format:
+                    {{
+                        "plan": "brief description of the plan",
+                        "sources": ["source1", "source2"],
+                        "steps": ["step1", "step2"]
+                    }}
+                    """
+                    try:
+                        response = model.generate_content(prompt)
+                        # Parse JSON
+                        import json
+                        plan_data = json.loads(response.text)
+                        task['plan'] = plan_data
+                        task['status'] = 'Plan Generated'
+                        st.success("Plan generated!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error generating plan: {e}")
+        
+        with col2:
+            if task['status'] == 'Plan Generated' and not task['approved']:
+                if st.button("Approve & Run"):
+                    task['approved'] = True
+                    task['status'] = 'Approved'
+                    st.success("Task approved! Running...")
+                    st.rerun()
+        
+        with col3:
+            if task['approved'] and task['status'] == 'Approved':
+                if st.button("Execute Task"):
+                    with st.spinner("Executing task..."):
+                        prompt = f"""
+                        You are an AI agent for {task['template']}.
+                        Task: {task['description']}
+                        Plan: {task['plan']}
+                        
+                        Execute the task and provide the final result.
+                        Respond ONLY with a valid JSON object in this exact format:
+                        {{
+                            "title": "Report Title",
+                            "outline": ["section1", "section2"],
+                            "report": "full detailed report in markdown",
+                            "sources": ["source1", "source2"],
+                            "word_count": 1234
+                        }}
+                        """
+                        try:
+                            response = model.generate_content(prompt)
+                            task['result'] = response.text
+                            task['status'] = 'Completed'
+                            st.success("Task completed!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error executing task: {e}")
+        
+        # Display plan
+        if task['plan']:
+            st.subheader("Generated Plan")
+            st.json(task['plan'])
+        
+        # Display result
+        if task['result']:
+            st.subheader("Task Result")
+            st.markdown(task['result'])
+            
+        # Back button
+        if st.button("Back to Tasks"):
+            st.session_state.current_task = None
+            st.rerun()
+
+    else:
+        st.header("Welcome to AgenticAI Assist")
+        st.write("Select a task from the sidebar or create a new one.")
+        
+        # Display all tasks
+        if st.session_state.tasks:
+            st.subheader("All Tasks")
+            for task in st.session_state.tasks:
+                st.write(f"- **{task['name']}**: {task['status']} (Created: {task['created_at'].strftime('%Y-%m-%d %H:%M')})")
+
+with tab2:
+    st.header("Direct AI Chat with Gemini")
+    st.write("Ask Gemini directly for any questions or tasks.")
+    
+    # Test API button
+    if st.button("Test Gemini API"):
+        with st.spinner("Testing API..."):
+            try:
+                test_response = model.generate_content("Hello, Gemini! Respond with 'API is working'.")
+                st.success(f"API Test Successful: {test_response.text.strip()}")
+            except Exception as e:
+                st.error(f"API Test Failed: {e}")
+    
+    if "chat_history" not in st.session_state:
+        st.session_state.chat_history = []
+    
+    # Display chat history
+    for message in st.session_state.chat_history:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+    
+    # Chat input
+    if prompt := st.chat_input("Ask Gemini..."):
+        # Add user message
+        st.session_state.chat_history.append({"role": "user", "content": prompt})
+        
+        # Generate response
+        with st.spinner("Gemini is thinking..."):
+            try:
+                response = model.generate_content(prompt)
+                ai_response = response.text
+            except Exception as e:
+                ai_response = f"Error: {e}"
+        
+        # Add AI response
+        st.session_state.chat_history.append({"role": "assistant", "content": ai_response})
+        
+        # Rerun to update chat
+        st.rerun()
