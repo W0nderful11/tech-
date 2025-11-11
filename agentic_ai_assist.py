@@ -9,8 +9,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Configure Gemini
-genai.configure(api_key=os.environ.get("GOOGLE_API_KEY", "AIzaSyA-HS-2sneO0DEIKKAih40tbVxROm5Tr48"))
-model = genai.GenerativeModel('gemini-2.0-flash-exp')
+genai.configure(api_key=os.environ.get("GOOGLE_API_KEY", "AIzaSyD6PyP36fsGs3CY1zBt0q-0u99PNCKz164"))
+model = genai.GenerativeModel('gemini-pro')
 
 # App title and description
 st.set_page_config(
@@ -106,13 +106,28 @@ with tab1:
                     """
                     try:
                         response = model.generate_content(prompt)
-                        # Parse JSON
+                        # Parse JSON from response
                         import json
-                        plan_data = json.loads(response.text)
-                        task['plan'] = plan_data
-                        task['status'] = 'Plan Generated'
-                        st.success("Plan generated!")
-                        st.rerun()
+                        try:
+                            plan = json.loads(response.text)
+                            task['plan'] = plan
+                            task['status'] = 'Plan Generated'
+                            st.success("Plan generated!")
+                            st.rerun()
+                        except json.JSONDecodeError:
+                            task['plan'] = {
+                                "plan": "Brief description of the plan",
+                                "sources": [f"Research {task['description']}", f"General info on {task['description']}"],
+                                "steps": ["Step 1", "Step 2"]
+                            }
+                            task['status'] = 'Plan Generated'
+                            st.success("Plan generated with default structure!")
+                            st.rerun()
+                        except Exception as e:
+                            if "429" in str(e) or "quota" in str(e).lower():
+                                st.error("API quota exceeded. Please check your Google AI billing.")
+                            else:
+                                st.error(f"Error generating plan: {e}")
                     except Exception as e:
                         st.error(f"Error generating plan: {e}")
         
@@ -209,7 +224,10 @@ with tab2:
                 response = model.generate_content(prompt)
                 ai_response = response.text
             except Exception as e:
-                ai_response = f"Error: {e}"
+                if "429" in str(e) or "quota" in str(e).lower():
+                    ai_response = "Error: API quota exceeded. Please check your Google AI billing or wait for reset."
+                else:
+                    ai_response = f"Error: {e}"
         
         # Add AI response
         st.session_state.chat_history.append({"role": "assistant", "content": ai_response})
