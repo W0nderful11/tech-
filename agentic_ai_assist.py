@@ -10,7 +10,7 @@ load_dotenv()
 
 # Configure Gemini
 genai.configure(api_key=os.environ.get("GOOGLE_API_KEY", "AIzaSyD6PyP36fsGs3CY1zBt0q-0u99PNCKz164"))
-model = genai.GenerativeModel('gemini-pro')
+model = genai.GenerativeModel('gemini-2.5-flash')
 
 # App title and description
 st.set_page_config(
