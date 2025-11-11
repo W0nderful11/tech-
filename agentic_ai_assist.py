@@ -93,16 +93,23 @@ with tab1:
             if st.button("Generate Plan", disabled=task['status'] != 'Created'):
                 with st.spinner("Generating plan..."):
                     prompt = f"""
-                    You are an AI agent for {task['template']}.
+                    You are a triage agent for {task['template']} tasks.
                     Task: {task['description']}
                     
-                    Create a detailed plan with steps, sources, and expected outcomes.
+                    Create a detailed execution plan with specific steps, relevant sources, and expected outcomes.
+                    For {task['template']} tasks, focus on:
+                    - Research Brief: Key research areas, data sources, analysis methods
+                    - Summarization: Analysis approach, key extraction, summary structure
+                    - Study Plan: Learning objectives, timeline, resources, assessment
+                    
                     Respond ONLY with a valid JSON object in this exact format:
                     {{
-                        "plan": "brief description of the plan",
-                        "sources": ["source1", "source2"],
-                        "steps": ["step1", "step2"]
+                        "plan": "Detailed description of the execution strategy and approach",
+                        "sources": ["Source 1: brief description", "Source 2: brief description"],
+                        "steps": ["Step 1: detailed action", "Step 2: detailed action", "Step 3: detailed action"]
                     }}
+                    
+                    Make steps actionable and specific. Sources should be relevant to the task.
                     """
                     try:
                         response = model.generate_content(prompt)
@@ -116,9 +123,18 @@ with tab1:
                             st.rerun()
                         except json.JSONDecodeError:
                             task['plan'] = {
-                                "plan": "Brief description of the plan",
-                                "sources": [f"Research {task['description']}", f"General info on {task['description']}"],
-                                "steps": ["Step 1", "Step 2"]
+                                "plan": f"Execute {task['template']} for: {task['description'][:100]}...",
+                                "sources": [
+                                    f"Primary source: {task['description'][:200]}...",
+                                    "General knowledge base for AI and autonomous agents",
+                                    "Academic papers on multi-agent systems"
+                                ],
+                                "steps": [
+                                    "Step 1: Analyze the input content and identify key themes",
+                                    "Step 2: Extract relevant information and structure findings",
+                                    "Step 3: Generate comprehensive output based on template requirements",
+                                    "Step 4: Review and validate results for accuracy"
+                                ]
                             }
                             task['status'] = 'Plan Generated'
                             st.success("Plan generated with default structure!")
